@@ -1,8 +1,11 @@
+require('dotenv').config()
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const mongoose = require('mongoose');
 const app = express();
+const encrypt = require('mongoose-encryption');
 
 app.use(express.static("public"));
 app.set('view engine', 'ejs');
@@ -15,10 +18,15 @@ app.get("/", function (req, res) {
     res.render("home");
 })
 
-const userSchema = {
+const userSchema = new mongoose.Schema({
     email:String,
     password:String
-}
+});
+
+
+userSchema.plugin(encrypt,{secret:process.env.SECRET,encryptedFields:["password"] }); // 플러그인 
+
+
 const User = new mongoose.model("User",userSchema);
 app.get("/login", function (req, res) {
     res.render('login');
