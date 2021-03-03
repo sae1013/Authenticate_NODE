@@ -38,9 +38,10 @@ mongoose.set("useCreateIndex",true);
 
 //스키마생성
 const userSchema = new mongoose.Schema({
-    email:{type:String,require:true,index:true,unique:true,sparse:true},
-    password:String,
     username:String,
+    password:String,
+    secret:String
+    
     
 });
 //스키마 플러그인
@@ -72,7 +73,7 @@ passport.use(new GoogleStrategy({
   function(accessToken, refreshToken, profile, cb) {
     // console.log('token:'+accessToKen);
     console.log("TOKEN함수");
-    User.findOrCreate({ email: profile.id,username: profile.displayName }, function (err, user) {
+    User.findOrCreate({ username: profile.id }, function (err, user) {
         console.log(profile);
         return cb(err, user); // google/auth/secrets의 passport함수로 들어가는것같음. (추정) 
     });
@@ -85,7 +86,7 @@ passport.use(new FacebookStrategy({
     callbackURL: "http://localhost:3000/auth/facebook/secrets"
   },
   function(accessToken, refreshToken, profile, cb) {
-    User.findOrCreate({ email: profile.id ,username: profile.displayName}, function (err, user) {
+    User.findOrCreate({ username: profile.id}, function (err, user) {
         console.log(profile);
         return cb(err, user); //
     });
@@ -120,11 +121,15 @@ app.get('/auth/facebook/secrets', passport.authenticate('facebook', { failureRed
 
 //=====================================================================
 app.get("/secrets", function(req,res){
-    if(req.isAuthenticated()){ //쿠키에 세션id확인
-        res.render("secrets");
-    }else{
-        res.redirect("/login");
-    }
+    User.find({"secret":{$ne: null}},function(err,foundUsers){
+        if(err) {
+            console.log(err);
+        }else{
+            if(foundUsers){
+                res.render("secrets",{users: foundUsers});
+            }
+        }
+    });
 });
 
 app.get("/login", function (req, res) {
@@ -169,6 +174,33 @@ app.post('/register',function(req,res){
    
     
 });
+
+app.get("/submit", function(req,res){ // 로그인 화면에서 submit 버튼을 누르면, 
+    if(req.isAuthenticated()){
+        res.render("submit");
+    }else{
+        res.redirect("/login");
+    }
+})
+
+app.post("/submit",function(req,res){
+    const submittedSecret = req.body.secret;
+    User.findById(req.user.id, function(err,foundUser){
+        if(err){
+            console.log(err)
+        }else{
+            if(foundUser){
+                foundUser.secret = submittedSecret;
+                foundUser.save(function(){
+                    res.redirect("/secrets");
+                });
+            }else{
+                res.redirect("/login");
+            }
+        }
+    })
+});
+
 
 app.get("/logout",function(req,res){
     req.logout(); // 쿠키파괴,세션파괴
