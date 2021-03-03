@@ -10,6 +10,7 @@ const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
 const session = require("express-session");
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const FacebookStrategy = require('passport-facebook');
 const findOrCreate = require("mongoose-findorcreate");
 
 
@@ -23,7 +24,7 @@ app.use(bodyParser.urlencoded({
 app.use(session({ 
     secret:"secret KEY",
     resave:false,
-    saveUninitialized: false
+    saveUninitialized: true
 }));
 
 app.use(flash());
@@ -37,11 +38,10 @@ mongoose.set("useCreateIndex",true);
 
 //스키마생성
 const userSchema = new mongoose.Schema({
-    email:String,
+    email:{type:String,require:true,index:true,unique:true,sparse:true},
     password:String,
-    googleId:String,
-    facebookId:String,
-    KaKaoId:String
+    username:String,
+    
 });
 //스키마 플러그인
 userSchema.plugin(passportLocalMongoose);
@@ -64,17 +64,30 @@ passport.serializeUser(function(user, done) {
   });
   
 passport.use(new GoogleStrategy({
-    clientID: process.env.CLIENT_ID,
-    clientSecret: process.env.CLIENT_SECRET,
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: "http://localhost:3000/auth/google/secrets",
     userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
   },
   function(accessToken, refreshToken, profile, cb) {
     // console.log('token:'+accessToKen);
     console.log("TOKEN함수");
-    User.findOrCreate({ googleId: profile.id }, function (err, user) {
-        console.log("찾은유저:"+user);
-        return cb(err, user);
+    User.findOrCreate({ email: profile.id,username: profile.displayName }, function (err, user) {
+        console.log(profile);
+        return cb(err, user); // google/auth/secrets의 passport함수로 들어가는것같음. (추정) 
+    });
+  }
+));
+
+passport.use(new FacebookStrategy({
+    clientID: process.env.FACEBOOK_CLIENT_ID,
+    clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/facebook/secrets"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    User.findOrCreate({ email: profile.id ,username: profile.displayName}, function (err, user) {
+        console.log(profile);
+        return cb(err, user); //
     });
   }
 ));
@@ -84,6 +97,7 @@ app.get("/", function (req, res) {
     res.render('home');
 });
 
+// ==========================구글 로그인===============================
 app.get('/auth/google', passport.authenticate('google', {
     scope: ['profile']
 }));
@@ -95,7 +109,16 @@ app.get('/auth/google/secrets',
     console.log("최종 성공 콜백 호출");
     res.redirect('/secrets');
   });
+//=============================페이스북 로그인============================
+app.get('/auth/facebook',passport.authenticate('facebook'));
 
+app.get('/auth/facebook/secrets', passport.authenticate('facebook', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect('/secrets');
+  });
+
+//=====================================================================
 app.get("/secrets", function(req,res){
     if(req.isAuthenticated()){ //쿠키에 세션id확인
         res.render("secrets");
@@ -116,11 +139,11 @@ app.post("/login",function(req,res){
     });
 
     req.login(user,function(err){
+    
         if(err){
             console.log(err);
         }else{
             passport.authenticate("local")(req,res,function(){ // 세션,쿠키에 저장됐을때 , passport.authenticate는 함수를 반환
-                
                 res.redirect("/secrets");
             });
         }
